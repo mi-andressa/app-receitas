@@ -1,179 +1,296 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import {
+  buscarPorCategoria,
+  buscarPorNome,
+  listarCategorias,
+  receitaAleatoria,
+} from '../services/api';
+import { traduzirLote, traduzirTexto } from '../services/traducao';
+import { nomeDaCategoria } from '../utils/receita';
+import useFavoritos from '../hooks/useFavoritos';
+import CartaoReceita from './CartaoReceita';
+import ModalReceita from './ModalReceita';
+import './BuscadorReceitas.css';
+
+const CONSULTA_INICIAL = { tipo: 'nome', valor: 'frango' };
+
+const SUGESTOES = ['Bolo', 'Frango', 'Peixe', 'Sopa', 'Torta'];
+
+const foiCancelado = (erro) => erro?.name === 'AbortError';
 
 export default function BuscadorReceitas() {
-  const [receitas, setReceitas] = useState([]);
-  const [busca, setBusca] = useState('chicken');
-  const [receitaSelecionada, setReceitaSelecionada] = useState(null);
-  const [traduzindo, setTraduzindo] = useState(false); 
+  const { favoritos, ehFavorito, alternar } = useFavoritos();
 
-  const buscarReceitas = async () => {
-    try {
-      const resposta = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${busca}`);
-      const dados = await resposta.json();
-      setReceitas(dados.meals || []);
-    } catch (erro) {
-      console.error("Erro ao buscar dados da API", erro);
-    }
-  };
+  const [termoDigitado, setTermoDigitado] = useState(CONSULTA_INICIAL.valor);
+  const [consulta, setConsulta] = useState(CONSULTA_INICIAL);
+  const [categorias, setCategorias] = useState([]);
+  const [receitas, setReceitas] = useState([]);
+  const [titulosPt, setTitulosPt] = useState({});
+  const [status, setStatus] = useState('carregando');
+  const [aberta, setAberta] = useState(null);
+  const [sorteando, setSorteando] = useState(false);
+  const [erroSorteio, setErroSorteio] = useState(false);
+
+  const lista = consulta.tipo === 'favoritos' ? favoritos : receitas;
 
   useEffect(() => {
-    buscarReceitas();
+    const controlador = new AbortController();
+    listarCategorias(controlador.signal)
+      .then(setCategorias)
+      .catch(() => setCategorias([]));
+    return () => controlador.abort();
   }, []);
 
-  const traduzirTexto = async (texto) => {
-    if (!texto) return "";
-    try {
-      const textoSeguro = texto.length > 490 ? texto.substring(0, 490) + "..." : texto;
-      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(textoSeguro)}&langpair=en|pt`;
-      
-      const resposta = await fetch(url);
-      const dados = await resposta.json();
-      
-      if (dados && dados.responseData && dados.responseData.translatedText) {
-        return dados.responseData.translatedText;
-      }
-      return texto;
-    } catch (erro) {
-      console.error("Erro na tradução:", erro);
-      return texto;
+  useEffect(() => {
+    if (consulta.tipo === 'favoritos') {
+      setStatus('sucesso');
+      return undefined;
     }
+
+    const controlador = new AbortController();
+    const { signal } = controlador;
+
+    (async () => {
+      try {
+        let resultado;
+
+        if (consulta.tipo === 'categoria') {
+          resultado = await buscarPorCategoria(consulta.valor, signal);
+        } else {
+          const termoEmIngles = await traduzirTexto(consulta.valor, 'pt', 'en', signal).catch(
+            (erro) => {
+              if (foiCancelado(erro)) throw erro;
+              return consulta.valor;
+            },
+          );
+          resultado = await buscarPorNome(termoEmIngles.toLowerCase(), signal);
+        }
+
+        setReceitas(resultado);
+        setStatus('sucesso');
+      } catch (erro) {
+        if (!foiCancelado(erro)) setStatus('erro');
+      }
+    })();
+
+    return () => controlador.abort();
+  }, [consulta]);
+
+  useEffect(() => {
+    if (lista.length === 0) return undefined;
+
+    const controlador = new AbortController();
+
+    traduzirLote(
+      lista.map((receita) => receita.strMeal),
+      controlador.signal,
+    )
+      .then(({ linhas }) => {
+        setTitulosPt((atual) => {
+          const novo = { ...atual };
+          lista.forEach((receita, i) => {
+            novo[receita.idMeal] = linhas[i];
+          });
+          return novo;
+        });
+      })
+      .catch(() => {});
+
+    return () => controlador.abort();
+  }, [lista]);
+
+  const iniciarConsulta = (novaConsulta) => {
+    setErroSorteio(false);
+    if (novaConsulta.tipo !== 'favoritos') setStatus('carregando');
+    setConsulta(novaConsulta);
   };
 
-  const abrirReceita = async (receita) => {
-    setReceitaSelecionada(receita); 
-    setTraduzindo(true);
+  const buscar = (evento) => {
+    evento.preventDefault();
+    const termo = termoDigitado.trim();
+    if (!termo) return;
 
+    iniciarConsulta({ tipo: 'nome', valor: termo });
+  };
+
+  const buscarSugestao = (sugestao) => {
+    const termo = sugestao.toLowerCase();
+    setTermoDigitado(termo);
+    iniciarConsulta({ tipo: 'nome', valor: termo });
+  };
+
+  const escolherCategoria = (categoria) => {
+    setTermoDigitado('');
+    iniciarConsulta({ tipo: 'categoria', valor: categoria });
+  };
+
+  const mostrarFavoritos = () => {
+    setTermoDigitado('');
+    iniciarConsulta({ tipo: 'favoritos', valor: '' });
+  };
+
+  const sortear = async () => {
+    setSorteando(true);
+    setErroSorteio(false);
     try {
-    
-      const tituloTraduzido = await traduzirTexto(receita.strMeal);
-      const instrucoesTraduzidas = await traduzirTexto(receita.strInstructions);
-
-      setReceitaSelecionada({
-        ...receita,
-        strMeal: tituloTraduzido,
-        strInstructions: instrucoesTraduzidas
-      });
-    } catch (erro) {
-      console.error("Falha ao atualizar tradução", erro);
+      setAberta(await receitaAleatoria());
+    } catch {
+      setErroSorteio(true);
     } finally {
-      setTraduzindo(false);
+      setSorteando(false);
     }
   };
 
-  const obterIngredientes = (receita) => {
-    let ingredientes = [];
-    for (let i = 1; i <= 20; i++) {
-      if (receita[`strIngredient${i}`] && receita[`strIngredient${i}`].trim() !== "") {
-        ingredientes.push(`${receita[`strMeasure${i}`]} de ${receita[`strIngredient${i}`]}`);
-      }
-    }
-    return ingredientes;
+  const titulosDaLista = {
+    nome: `Resultados para “${consulta.valor}”`,
+    categoria: `Categoria: ${nomeDaCategoria(consulta.valor)}`,
+    favoritos: 'Suas receitas favoritas',
   };
+
+  const mensagem = erroSorteio
+    ? 'Não foi possível sortear uma receita agora. Tente novamente.'
+    : {
+        carregando: '',
+        erro: 'Não foi possível carregar as receitas. Verifique a conexão e tente novamente.',
+        sucesso:
+          lista.length > 0
+            ? ''
+            : consulta.tipo === 'favoritos'
+              ? 'Você ainda não favoritou nenhuma receita. Toque no ♡ de um prato.'
+              : 'Nenhuma receita encontrada. Tente outro termo, como “bolo”, “sopa” ou “arroz”.',
+      }[status];
+
+  const carregando = status === 'carregando' && consulta.tipo !== 'favoritos';
+  const mostrarContagem = !carregando && status !== 'erro' && lista.length > 0;
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', position: 'relative' }}>
-      <h1 style={{ textAlign: 'center', color: '#333' }}>🍽️ Buscador Inteligente de Receitas</h1>
-      
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '30px' }}>
-        <input 
-          type="text" 
-          value={busca} 
-          onChange={(e) => setBusca(e.target.value)} 
-          placeholder="Digita um ingrediente em inglês (ex: beef, chicken)..."
-          style={{ padding: '10px', width: '300px', borderRadius: '4px', border: '1px solid #ccc', marginRight: '10px' }}
-        />
-        <button 
-          onClick={buscarReceitas} 
-          style={{ padding: '10px 20px', backgroundColor: '#007BFF', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-        >
-          Pesquisar
-        </button>
-      </div>
+    <div className="app">
+      <header className="hero">
+        <p className="hero__selo">Receitas do mundo, em português</p>
+        <h1>
+          O que vamos <em>cozinhar</em> hoje?
+        </h1>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
-        {receitas.length > 0 ? (
-          receitas.map((receita) => (
-            <div 
-              key={receita.idMeal} 
-              onClick={() => abrirReceita(receita)} 
-              style={{ 
-                border: '1px solid #ddd', borderRadius: '8px', padding: '15px', backgroundColor: '#f9f9f9', 
-                textAlign: 'center', cursor: 'pointer', transition: 'transform 0.2s', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' 
-              }}
-              onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-              onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-            >
-              <img 
-                src={receita.strMealThumb} 
-                alt={receita.strMeal} 
-                style={{ width: '100%', borderRadius: '8px', marginBottom: '10px' }} 
-              />
-              <h3 style={{ fontSize: '1.2rem', margin: '10px 0', color: '#222' }}>{receita.strMeal}</h3>
-              <p style={{ margin: '5px 0', color: '#007BFF', fontSize: '0.9rem', fontWeight: 'bold' }}>Clique para ver e traduzir</p>
-            </div>
-          ))
-        ) : (
-          <p style={{ textAlign: 'center', width: '100%', color: 'red' }}>
-            Nenhuma receita encontrada. Tenta novamente.
-          </p>
-        )}
-      </div>
+        <form className="busca" role="search" onSubmit={buscar}>
+          <label htmlFor="campo-busca" className="visualmente-oculto">
+            Buscar receita
+          </label>
+          <input
+            id="campo-busca"
+            className="busca__campo"
+            type="search"
+            value={termoDigitado}
+            onChange={(e) => setTermoDigitado(e.target.value)}
+            placeholder="Frango, bolo, sopa, arroz…"
+            autoComplete="off"
+          />
+          <button type="submit" className="botao botao--primario">
+            Buscar
+          </button>
+        </form>
 
-      {/* JANELE MODAL */}
-      {receitaSelecionada && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', 
-          backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: 'white', padding: '30px', borderRadius: '12px', maxWidth: '700px', width: '90%', 
-            maxHeight: '90vh', overflowY: 'auto', position: 'relative'
-          }}>
-            <button 
-              onClick={() => setReceitaSelecionada(null)} 
-              style={{ 
-                position: 'absolute', top: '15px', right: '15px', background: '#dc3545', color: 'white', 
-                border: 'none', borderRadius: '50%', width: '35px', height: '35px', cursor: 'pointer', 
-                fontWeight: 'bold', fontSize: '1.2rem' 
-              }}
+        <div className="sugestoes" role="group" aria-label="Sugestões de busca">
+          {SUGESTOES.map((sugestao) => (
+            <button
+              key={sugestao}
+              type="button"
+              className="sugestao"
+              onClick={() => buscarSugestao(sugestao)}
             >
-              X
+              {sugestao}
             </button>
-            
-            <h2 style={{ marginTop: 0, color: '#333' }}>
-              {receitaSelecionada.strMeal}
-              {traduzindo && <span style={{ fontSize: '1rem', color: '#ff9900', marginLeft: '10px' }}>(A traduzir...)</span>}
-            </h2>
-
-            <img 
-              src={receitaSelecionada.strMealThumb} 
-              alt={receitaSelecionada.strMeal} 
-              style={{ width: '100%', maxHeight: '350px', objectFit: 'cover', borderRadius: '8px', marginBottom: '20px' }} 
-            />
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-              <div>
-                <h3 style={{ color: '#007BFF' }}>Ingredientes originais:</h3>
-                <ul style={{ paddingLeft: '20px', lineHeight: '1.8' }}>
-                  {obterIngredientes(receitaSelecionada).map((item, index) => (
-                    <li key={index}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-              
-              <div>
-                <h3 style={{ color: '#007BFF' }}>Instruções:</h3>
-                {traduzindo ? (
-                  <p style={{ color: '#ff9900', fontWeight: 'bold' }}>A carregar tradução...</p>
-                ) : (
-                  <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', textAlign: 'justify' }}>
-                    {receitaSelecionada.strInstructions}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
+
+        <button type="button" className="botao botao--fantasma" onClick={sortear} disabled={sorteando}>
+          {sorteando ? 'Sorteando…' : '🎲 Surpreenda-me'}
+        </button>
+      </header>
+
+      <nav className="categorias" aria-label="Filtrar por categoria">
+        <button
+          type="button"
+          className="chip chip--favoritos"
+          aria-pressed={consulta.tipo === 'favoritos'}
+          onClick={mostrarFavoritos}
+        >
+          ♥ Favoritos ({favoritos.length})
+        </button>
+        {categorias.map((categoria) => (
+          <button
+            key={categoria}
+            type="button"
+            className="chip"
+            aria-pressed={consulta.tipo === 'categoria' && consulta.valor === categoria}
+            onClick={() => escolherCategoria(categoria)}
+          >
+            {nomeDaCategoria(categoria)}
+          </button>
+        ))}
+      </nav>
+
+      <main className="conteudo">
+        <h2 className="conteudo__titulo">
+          {titulosDaLista[consulta.tipo]}
+          {mostrarContagem && (
+            <span className="conteudo__contagem">
+              {lista.length} {lista.length === 1 ? 'receita' : 'receitas'}
+            </span>
+          )}
+        </h2>
+
+        <p className="mensagem" role="status">
+          {mensagem}
+        </p>
+
+        {status === 'erro' && consulta.tipo !== 'favoritos' && (
+          <button
+            type="button"
+            className="botao botao--primario"
+            onClick={() => iniciarConsulta({ ...consulta })}
+          >
+            Tentar novamente
+          </button>
+        )}
+
+        {carregando && (
+          <ul className="grade" aria-hidden="true">
+            {Array.from({ length: 8 }, (_, i) => (
+              <li key={i} className="esqueleto" />
+            ))}
+          </ul>
+        )}
+
+        {!carregando && status !== 'erro' && lista.length > 0 && (
+          <ul className="grade">
+            {lista.map((receita) => (
+              <li key={receita.idMeal}>
+                <CartaoReceita
+                  receita={receita}
+                  titulo={titulosPt[receita.idMeal]}
+                  favorito={ehFavorito(receita.idMeal)}
+                  aoAbrir={setAberta}
+                  aoFavoritar={alternar}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
+
+      <footer className="rodape">
+        Receitas: <a href="https://www.themealdb.com">TheMealDB</a> · Tradução automática
+        (Google Translate / MyMemory): pode conter imprecisões.
+      </footer>
+
+      {aberta && (
+        <ModalReceita
+          key={aberta.idMeal}
+          resumo={aberta}
+          favorito={ehFavorito(aberta.idMeal)}
+          aoFavoritar={alternar}
+          aoFechar={() => setAberta(null)}
+        />
       )}
     </div>
   );
