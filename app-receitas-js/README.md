@@ -3,8 +3,8 @@
 Projeto da **Atividade Avaliativa 04** de Desenvolvimento Web Front End (ADS – IFSP).
 
 **Autora:** Mirela Andressa de Oliveira
-**Aplicação publicada:** <COLE AQUI O LINK DA VERCEL>
-**Repositório:** <COLE AQUI O LINK DO GITHUB>
+**Aplicação publicada:** <(https://app-receitas-dusky.vercel.app)>
+**Repositório:** <(https://github.com/mi-andressa/app-receitas/tree/main/app-receitas)B>
 
 ## 📌 Sobre o projeto
 

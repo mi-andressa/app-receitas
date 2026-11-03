@@ -1,0 +1,52 @@
+
+:root {
+  --papel: #fbf6ee;
+  --papel-2: #f3ebdd;
+  --tinta: #2b211b;
+  --tinta-suave: #5e5148;
+  --linha: #e4d8c6;
+  --tomate: #c2381f;
+  --tomate-escuro: #9f2a14;
+  --superficie: #fff;
+  --aviso: #7a4300;
+  --brilho-esqueleto: #fff7e8;
+
+  --fonte-titulo: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --fonte-texto: 'DM Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  font-family: var(--fonte-texto);
+  color-scheme: light;
+  color: var(--tinta);
+  background: var(--papel);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --papel: #1d1713;
+    --papel-2: #2a221c;
+    --tinta: #f3ebdd;
+    --tinta-suave: #c4b6a6;
+    --linha: #3d332b;
+    --tomate-escuro: #f08a6e;
+    --superficie: #2a221c;
+    --aviso: #f2b66d;
+    --brilho-esqueleto: #3a2f27;
+
+    color-scheme: dark;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  line-height: 1.5;
+}
+
+img {
+  max-width: 100%;
+}
