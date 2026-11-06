@@ -1,8 +1,9 @@
 node_modules/
 dist/
-*.local
 .venv/
 __pycache__/
 *.pyc
-.vercel/
+receitas.db
+.vercel
 .DS_Store
+

@@ -5,19 +5,29 @@ import {
   listarCategorias,
   receitaAleatoria,
 } from '../services/api';
-import useFavoritos from '../hooks/useFavoritos';
+import useCaderno from '../hooks/useCaderno';
 import CartaoReceita from './CartaoReceita';
+import FormReceita from './FormReceita';
+import ModalCaderno from './ModalCaderno';
 import ModalReceita from './ModalReceita';
 import './BuscadorReceitas.css';
+import './Caderno.css';
 
 const CONSULTA_INICIAL = { tipo: 'nome', valor: 'frango' };
 
 const SUGESTOES = ['Bolo', 'Frango', 'Peixe', 'Sopa', 'Torta'];
 
+const VISOES_DO_BANCO = ['favoritos', 'caderno'];
+
 const foiCancelado = (erro) => erro?.name === 'AbortError';
 
+const tituloOriginal = (receita) =>
+  receita.tituloPt && receita.tituloPt.toLowerCase() !== receita.strMeal.toLowerCase()
+    ? receita.strMeal
+    : '';
+
 export default function BuscadorReceitas() {
-  const { favoritos, ehFavorito, alternar } = useFavoritos();
+  const caderno = useCaderno();
 
   const [termoDigitado, setTermoDigitado] = useState(CONSULTA_INICIAL.valor);
   const [consulta, setConsulta] = useState(CONSULTA_INICIAL);
@@ -25,12 +35,16 @@ export default function BuscadorReceitas() {
   const [receitas, setReceitas] = useState([]);
   const [statusBusca, setStatusBusca] = useState('carregando');
   const [aberta, setAberta] = useState(null);
+  const [abertaCaderno, setAbertaCaderno] = useState(null);
+  const [formulario, setFormulario] = useState(null);
   const [sorteando, setSorteando] = useState(false);
   const [erroSorteio, setErroSorteio] = useState(false);
 
-  const verFavoritos = consulta.tipo === 'favoritos';
-  const lista = verFavoritos ? favoritos : receitas;
-  const status = verFavoritos ? 'sucesso' : statusBusca;
+  const doBanco = VISOES_DO_BANCO.includes(consulta.tipo);
+  const lista =
+    { favoritos: caderno.favoritos, caderno: caderno.receitas }[consulta.tipo] ?? receitas;
+  const status = doBanco ? caderno.status : statusBusca;
+  const receitaAberta = caderno.receitas.find((receita) => receita.id === abertaCaderno);
 
   useEffect(() => {
     const controlador = new AbortController();
@@ -41,7 +55,7 @@ export default function BuscadorReceitas() {
   }, []);
 
   useEffect(() => {
-    if (consulta.tipo === 'favoritos') return undefined;
+    if (VISOES_DO_BANCO.includes(consulta.tipo)) return undefined;
 
     const controlador = new AbortController();
     const { signal } = controlador;
@@ -65,7 +79,7 @@ export default function BuscadorReceitas() {
 
   const iniciarConsulta = (novaConsulta) => {
     setErroSorteio(false);
-    if (novaConsulta.tipo !== 'favoritos') setStatusBusca('carregando');
+    if (!VISOES_DO_BANCO.includes(novaConsulta.tipo)) setStatusBusca('carregando');
     setConsulta(novaConsulta);
   };
 
@@ -88,9 +102,9 @@ export default function BuscadorReceitas() {
     iniciarConsulta({ tipo: 'categoria', valor: categoria.id, nome: categoria.nome });
   };
 
-  const mostrarFavoritos = () => {
+  const mostrarDoBanco = (tipo) => {
     setTermoDigitado('');
-    iniciarConsulta({ tipo: 'favoritos', valor: '' });
+    iniciarConsulta({ tipo, valor: '' });
   };
 
   const sortear = async () => {
@@ -105,23 +119,47 @@ export default function BuscadorReceitas() {
     }
   };
 
+  const tentarNovamente = () =>
+    doBanco ? caderno.recarregar() : iniciarConsulta({ ...consulta });
+
+  const salvarReceita = async (salva) => {
+    setFormulario(null);
+    await caderno.recarregar();
+    setAbertaCaderno(salva.id);
+  };
+
+  const editarReceita = (receita) => {
+    setAbertaCaderno(null);
+    setFormulario({ receita });
+  };
+
+  const fecharFormulario = () => {
+    const idEditado = formulario?.receita?.id;
+    setFormulario(null);
+    if (idEditado) setAbertaCaderno(idEditado);
+  };
+
   const titulosDaLista = {
     nome: `Resultados para “${consulta.valor}”`,
     categoria: `Categoria: ${consulta.nome}`,
     favoritos: 'Suas receitas favoritas',
+    caderno: 'Meu caderno de receitas',
   };
+
+  const mensagemVazia =
+    {
+      favoritos: 'Você ainda não favoritou nenhuma receita. Toque no ♡ de um prato.',
+      caderno: 'Seu caderno está vazio. Cadastre uma receita ou favorite um prato.',
+    }[consulta.tipo] ??
+    'Nenhuma receita encontrada. Tente outro termo, como “bolo”, “sopa” ou “arroz”.';
 
   const mensagem = erroSorteio
     ? 'Não foi possível sortear uma receita agora. Tente novamente.'
-    : {
+    : caderno.aviso ||
+      {
         carregando: '',
         erro: 'Não foi possível carregar as receitas. Verifique a conexão e tente novamente.',
-        sucesso:
-          lista.length > 0
-            ? ''
-            : verFavoritos
-              ? 'Você ainda não favoritou nenhuma receita. Toque no ♡ de um prato.'
-              : 'Nenhuma receita encontrada. Tente outro termo, como “bolo”, “sopa” ou “arroz”.',
+        sucesso: lista.length > 0 ? '' : mensagemVazia,
       }[status];
 
   const carregando = status === 'carregando';
@@ -175,10 +213,18 @@ export default function BuscadorReceitas() {
         <button
           type="button"
           className="chip chip--favoritos"
-          aria-pressed={verFavoritos}
-          onClick={mostrarFavoritos}
+          aria-pressed={consulta.tipo === 'favoritos'}
+          onClick={() => mostrarDoBanco('favoritos')}
         >
-          ♥ Favoritos ({favoritos.length})
+          ♥ Favoritos ({caderno.favoritos.length})
+        </button>
+        <button
+          type="button"
+          className="chip chip--favoritos"
+          aria-pressed={consulta.tipo === 'caderno'}
+          onClick={() => mostrarDoBanco('caderno')}
+        >
+          📒 Meu caderno ({caderno.receitas.length})
         </button>
         {categorias.map((categoria) => (
           <button
@@ -194,25 +240,32 @@ export default function BuscadorReceitas() {
       </nav>
 
       <main className="conteudo">
-        <h2 className="conteudo__titulo">
-          {titulosDaLista[consulta.tipo]}
-          {mostrarContagem && (
-            <span className="conteudo__contagem">
-              {lista.length} {lista.length === 1 ? 'receita' : 'receitas'}
-            </span>
+        <div className="conteudo__cabecalho">
+          <h2 className="conteudo__titulo">
+            {titulosDaLista[consulta.tipo]}
+            {mostrarContagem && (
+              <span className="conteudo__contagem">
+                {lista.length} {lista.length === 1 ? 'receita' : 'receitas'}
+              </span>
+            )}
+          </h2>
+          {consulta.tipo === 'caderno' && (
+            <button
+              type="button"
+              className="botao botao--primario"
+              onClick={() => setFormulario({ receita: null })}
+            >
+              + Nova receita
+            </button>
           )}
-        </h2>
+        </div>
 
         <p className="mensagem" role="status">
           {mensagem}
         </p>
 
         {status === 'erro' && (
-          <button
-            type="button"
-            className="botao botao--primario"
-            onClick={() => iniciarConsulta({ ...consulta })}
-          >
+          <button type="button" className="botao botao--primario" onClick={tentarNovamente}>
             Tentar novamente
           </button>
         )}
@@ -227,33 +280,69 @@ export default function BuscadorReceitas() {
 
         {!carregando && status !== 'erro' && lista.length > 0 && (
           <ul className="grade">
-            {lista.map((receita) => (
-              <li key={receita.idMeal}>
-                <CartaoReceita
-                  receita={receita}
-                  titulo={receita.tituloPt}
-                  favorito={ehFavorito(receita.idMeal)}
-                  aoAbrir={setAberta}
-                  aoFavoritar={alternar}
-                />
-              </li>
-            ))}
+            {lista.map((receita) =>
+              doBanco ? (
+                <li key={`caderno-${receita.id}`}>
+                  <CartaoReceita
+                    imagem={receita.imagem}
+                    titulo={receita.titulo}
+                    subtitulo={receita.categoria}
+                    favorito={receita.favorita}
+                    aoAbrir={() => setAbertaCaderno(receita.id)}
+                    aoFavoritar={() => caderno.alternarFavorita(receita)}
+                  />
+                </li>
+              ) : (
+                <li key={receita.idMeal}>
+                  <CartaoReceita
+                    imagem={`${receita.strMealThumb}/medium`}
+                    titulo={receita.tituloPt || receita.strMeal}
+                    subtitulo={tituloOriginal(receita)}
+                    favorito={caderno.ehFavorito(receita.idMeal)}
+                    aoAbrir={() => setAberta(receita)}
+                    aoFavoritar={() => caderno.alternarMealdb(receita.idMeal)}
+                  />
+                </li>
+              ),
+            )}
           </ul>
         )}
       </main>
 
       <footer className="rodape">
         Receitas: <a href="https://www.themealdb.com">TheMealDB</a> · Tradução automática
-        (Google Translate / MyMemory): pode conter imprecisões.
+        (Google Translate / MyMemory): pode conter imprecisões · Seu caderno fica salvo em um
+        banco SQLite.
       </footer>
 
       {aberta && (
         <ModalReceita
           key={aberta.idMeal}
           resumo={aberta}
-          favorito={ehFavorito(aberta.idMeal)}
-          aoFavoritar={alternar}
+          favorito={caderno.ehFavorito(aberta.idMeal)}
+          aoFavoritar={(receita) => caderno.alternarMealdb(receita.idMeal)}
           aoFechar={() => setAberta(null)}
+        />
+      )}
+
+      {abertaCaderno !== null && (
+        <ModalCaderno
+          key={abertaCaderno}
+          id={abertaCaderno}
+          favorito={Boolean(receitaAberta?.favorita)}
+          aoFavoritar={() => receitaAberta && caderno.alternarFavorita(receitaAberta)}
+          aoEditar={editarReceita}
+          aoAlterar={caderno.recarregar}
+          aoFechar={() => setAbertaCaderno(null)}
+        />
+      )}
+
+      {formulario && (
+        <FormReceita
+          key={formulario.receita?.id ?? 'nova'}
+          receita={formulario.receita}
+          aoSalvar={salvarReceita}
+          aoFechar={fecharFormulario}
         />
       )}
     </div>

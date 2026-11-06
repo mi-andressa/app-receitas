@@ -2,7 +2,7 @@
   "rewrites": [{ "source": "/api/(.*)", "destination": "/api/index" }],
   "functions": {
     "api/**/*.py": {
-      "excludeFiles": "{node_modules/**,src/**,dist/**,public/**}"
+      "excludeFiles": "{node_modules/**,src/**,dist/**,public/**,terminal/**,testes.py,receitas.db}"
     }
   }
 }
