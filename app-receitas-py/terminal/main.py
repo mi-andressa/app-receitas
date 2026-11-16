@@ -1,3 +1,4 @@
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -10,14 +11,14 @@ from menu import Menu
 
 
 def main():
-    with BancoDeDados() as banco:
-        caderno = Caderno(banco)
+    try:
+        with BancoDeDados() as banco:
+            caderno = Caderno(banco)
 
-        quantidade = caderno.populador.popular_se_vazio()
-        if quantidade:
-            print(f"✔ Banco alimentado com {quantidade} receitas de exemplo.")
+            quantidade = caderno.populador.popular_se_vazio()
+            if quantidade:
+                print(f"✔ Banco alimentado com {quantidade} receitas de exemplo.")
 
-        try:
             Menu(
                 caderno.categorias,
                 caderno.ingredientes,
@@ -25,8 +26,10 @@ def main():
                 caderno.avaliacoes,
                 ImportadorTerminal(caderno.importador),
             ).executar()
-        except (KeyboardInterrupt, EOFError):
-            print("\n\nPrograma encerrado pelo usuário. Até a próxima! 👋")
+    except (KeyboardInterrupt, EOFError):
+        print("\n\nPrograma encerrado pelo usuário. Até a próxima! 👋")
+    except sqlite3.Error as erro:
+        print(f"⚠ Não foi possível usar o banco de dados: {erro}")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ tabelas = [
     )
 ]
 for tabela in tabelas:
-    total = conexao.execute(f"SELECT COUNT(*) FROM {tabela}").fetchone()[0]
+    total = conexao.execute(f'SELECT COUNT(*) FROM "{tabela}"').fetchone()[0]
     print(f"{tabela:22} {total} registro(s)")
 
 print("\nReceitas e suas categorias:")

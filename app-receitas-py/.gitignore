@@ -1,9 +1,7 @@
-node_modules/
-dist/
 .venv/
 __pycache__/
 *.pyc
-receitas.db
-.vercel
-.DS_Store
-
+node_modules/
+dist/
+*.db
+.vercel/

@@ -17,6 +17,9 @@ class Categoria:
     id: int | None = None
 
     def __post_init__(self):
+        self.validar()
+
+    def validar(self):
         self.nome = _obrigatorio(self.nome, "nome")
 
     def __str__(self):
@@ -30,6 +33,9 @@ class Ingrediente:
     id: int | None = None
 
     def __post_init__(self):
+        self.validar()
+
+    def validar(self):
         self.nome = _obrigatorio(self.nome, "nome")
 
     def __str__(self):
@@ -59,6 +65,9 @@ class Receita:
     itens: list[ItemReceita] = field(default_factory=list)
 
     def __post_init__(self):
+        self.validar()
+
+    def validar(self):
         self.titulo = _obrigatorio(self.titulo, "título")
         self.modo_preparo = _obrigatorio(self.modo_preparo, "modo de preparo")
 
@@ -82,7 +91,10 @@ class Avaliacao:
     id: int | None = None
 
     def __post_init__(self):
-        if not 1 <= self.nota <= 5:
+        self.validar()
+
+    def validar(self):
+        if not isinstance(self.nota, int) or not 1 <= self.nota <= 5:
             raise ValueError("A nota deve estar entre 1 e 5.")
 
     def __str__(self):

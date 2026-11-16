@@ -84,6 +84,13 @@ class TestesCaderno(unittest.TestCase):
         with self.assertRaises(ValueError):
             Receita("   ", "preparo")
 
+    def test_validacao_tambem_na_atualizacao(self):
+        receita = self._receita()
+        receita.titulo = "   "
+        with self.assertRaises(ValueError):
+            self.caderno.receitas.atualizar(receita)
+        self.assertEqual(self.caderno.receitas.buscar(receita.id).titulo, "Brigadeiro")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

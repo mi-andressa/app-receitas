@@ -1,12 +1,12 @@
 import os
 import sqlite3
 import sys
-from typing import List
+from typing import Annotated, List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,9 @@ from backend.caderno import Caderno
 from backend.modelos import Avaliacao, Categoria, Ingrediente, ItemReceita, Receita
 from backend.receita import nome_da_categoria, obter_ingredientes, preparar_passos
 from backend.traducao import traduzir_lote, traduzir_texto
+
+LIMITE_SQLITE = 2**63 - 1  # maior INTEGER que o SQLite consegue armazenar
+IdBanco = Annotated[int, Path(ge=1, le=LIMITE_SQLITE)]
 
 app = FastAPI(title="API do Buscador de Receitas")
 
@@ -259,7 +262,7 @@ def listar_receitas_caderno(favoritas: bool = False, caderno: Caderno = Depends(
 
 
 @app.get("/api/caderno/receitas/{id_receita}")
-def detalhar_receita_caderno(id_receita: int, caderno: Caderno = Depends(obter_caderno)):
+def detalhar_receita_caderno(id_receita: IdBanco, caderno: Caderno = Depends(obter_caderno)):
     return detalhe_json(caderno, receita_ou_404(caderno, id_receita))
 
 
@@ -271,7 +274,7 @@ def criar_receita_caderno(dados: ReceitaEntrada, caderno: Caderno = Depends(obte
 
 @app.put("/api/caderno/receitas/{id_receita}")
 def atualizar_receita_caderno(
-    id_receita: int, dados: ReceitaEntrada, caderno: Caderno = Depends(obter_caderno)
+    id_receita: IdBanco, dados: ReceitaEntrada, caderno: Caderno = Depends(obter_caderno)
 ):
     receita = montar_receita(caderno, dados, receita_ou_404(caderno, id_receita))
     caderno.receitas.atualizar_com_itens(receita)
@@ -279,7 +282,7 @@ def atualizar_receita_caderno(
 
 
 @app.patch("/api/caderno/receitas/{id_receita}/favorita")
-def alternar_favorita(id_receita: int, caderno: Caderno = Depends(obter_caderno)):
+def alternar_favorita(id_receita: IdBanco, caderno: Caderno = Depends(obter_caderno)):
     receita = receita_ou_404(caderno, id_receita)
     receita.alternar_favorita()
     caderno.receitas.atualizar(receita)
@@ -287,7 +290,7 @@ def alternar_favorita(id_receita: int, caderno: Caderno = Depends(obter_caderno)
 
 
 @app.delete("/api/caderno/receitas/{id_receita}", status_code=204)
-def excluir_receita_caderno(id_receita: int, caderno: Caderno = Depends(obter_caderno)):
+def excluir_receita_caderno(id_receita: IdBanco, caderno: Caderno = Depends(obter_caderno)):
     if not caderno.receitas.excluir(id_receita):
         raise HTTPException(status_code=404, detail="Receita não encontrada.")
     return Response(status_code=204)
@@ -315,7 +318,7 @@ def criar_categoria(dados: CategoriaEntrada, caderno: Caderno = Depends(obter_ca
 
 @app.put("/api/caderno/categorias/{id_categoria}")
 def atualizar_categoria(
-    id_categoria: int, dados: CategoriaEntrada, caderno: Caderno = Depends(obter_caderno)
+    id_categoria: IdBanco, dados: CategoriaEntrada, caderno: Caderno = Depends(obter_caderno)
 ):
     if caderno.categorias.buscar(id_categoria) is None:
         raise HTTPException(status_code=404, detail="Categoria não encontrada.")
@@ -325,7 +328,7 @@ def atualizar_categoria(
 
 
 @app.delete("/api/caderno/categorias/{id_categoria}", status_code=204)
-def excluir_categoria(id_categoria: int, caderno: Caderno = Depends(obter_caderno)):
+def excluir_categoria(id_categoria: IdBanco, caderno: Caderno = Depends(obter_caderno)):
     if not caderno.categorias.excluir(id_categoria):
         raise HTTPException(status_code=404, detail="Categoria não encontrada.")
     return Response(status_code=204)
@@ -343,7 +346,7 @@ def criar_ingrediente(dados: IngredienteEntrada, caderno: Caderno = Depends(obte
 
 @app.put("/api/caderno/ingredientes/{id_ingrediente}")
 def atualizar_ingrediente(
-    id_ingrediente: int, dados: IngredienteEntrada, caderno: Caderno = Depends(obter_caderno)
+    id_ingrediente: IdBanco, dados: IngredienteEntrada, caderno: Caderno = Depends(obter_caderno)
 ):
     if caderno.ingredientes.buscar(id_ingrediente) is None:
         raise HTTPException(status_code=404, detail="Ingrediente não encontrado.")
@@ -353,7 +356,7 @@ def atualizar_ingrediente(
 
 
 @app.delete("/api/caderno/ingredientes/{id_ingrediente}", status_code=204)
-def excluir_ingrediente(id_ingrediente: int, caderno: Caderno = Depends(obter_caderno)):
+def excluir_ingrediente(id_ingrediente: IdBanco, caderno: Caderno = Depends(obter_caderno)):
     if not caderno.ingredientes.excluir(id_ingrediente):
         raise HTTPException(status_code=404, detail="Ingrediente não encontrado.")
     return Response(status_code=204)
@@ -361,7 +364,7 @@ def excluir_ingrediente(id_ingrediente: int, caderno: Caderno = Depends(obter_ca
 
 @app.post("/api/caderno/receitas/{id_receita}/avaliacoes", status_code=201)
 def avaliar_receita(
-    id_receita: int, dados: AvaliacaoEntrada, caderno: Caderno = Depends(obter_caderno)
+    id_receita: IdBanco, dados: AvaliacaoEntrada, caderno: Caderno = Depends(obter_caderno)
 ):
     receita_ou_404(caderno, id_receita)
     avaliacao = Avaliacao(id_receita, dados.nota, dados.comentario.strip())
@@ -370,7 +373,7 @@ def avaliar_receita(
 
 @app.put("/api/caderno/avaliacoes/{id_avaliacao}")
 def atualizar_avaliacao(
-    id_avaliacao: int, dados: AvaliacaoEntrada, caderno: Caderno = Depends(obter_caderno)
+    id_avaliacao: IdBanco, dados: AvaliacaoEntrada, caderno: Caderno = Depends(obter_caderno)
 ):
     atual = caderno.avaliacoes.buscar(id_avaliacao)
     if atual is None:
@@ -383,7 +386,7 @@ def atualizar_avaliacao(
 
 
 @app.delete("/api/caderno/avaliacoes/{id_avaliacao}", status_code=204)
-def excluir_avaliacao(id_avaliacao: int, caderno: Caderno = Depends(obter_caderno)):
+def excluir_avaliacao(id_avaliacao: IdBanco, caderno: Caderno = Depends(obter_caderno)):
     if not caderno.avaliacoes.excluir(id_avaliacao):
         raise HTTPException(status_code=404, detail="Avaliação não encontrada.")
     return Response(status_code=204)

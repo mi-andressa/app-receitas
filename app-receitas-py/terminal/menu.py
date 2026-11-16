@@ -4,6 +4,8 @@ import textwrap
 from backend.importador import ErroImportacao
 from backend.modelos import Avaliacao, Categoria, Ingrediente, ItemReceita, Receita
 
+LIMITE_SQLITE = 2**63 - 1
+
 
 class Menu:
     def __init__(self, categorias, ingredientes, receitas, avaliacoes, importador):
@@ -44,11 +46,13 @@ class Menu:
             except sqlite3.IntegrityError:
                 print("⚠ Operação recusada pelo banco: registro duplicado ou em uso por outra tabela.")
             except sqlite3.OperationalError:
-                print("⚠ O banco está ocupado no momento. Tente novamente.")
+                print("⚠ O banco não conseguiu concluir a operação agora. Tente novamente.")
             except sqlite3.Error:
                 print("⚠ Erro inesperado no banco de dados. A operação foi cancelada.")
             except ErroImportacao as erro:
                 print(f"⚠ {erro}")
+            except Exception as erro:  # rede de segurança: nenhuma opção derruba o menu
+                print(f"⚠ Erro inesperado ({type(erro).__name__}). A operação foi cancelada.")
             if pausar:
                 resposta = input("\nEnter para ver o menu, ou digite a próxima opção: ").strip()
                 if resposta.isdigit() and 0 <= int(resposta) <= len(opcoes):
@@ -56,6 +60,7 @@ class Menu:
 
     @staticmethod
     def _ler_texto(rotulo, obrigatorio=True, padrao=""):
+        padrao = padrao or ""  # defesa em profundidade: None vira texto vazio
         exibicao = padrao if len(padrao) <= 40 else padrao[:37] + "..."
         sufixo = f" [{exibicao}]" if padrao else ""
         while True:
@@ -79,6 +84,9 @@ class Menu:
                 valor = int(bruto)
             except ValueError:
                 print("⚠ Digite um número inteiro.")
+                continue
+            if abs(valor) > LIMITE_SQLITE:
+                print("⚠ Número grande demais.")
                 continue
             if (minimo is not None and valor < minimo) or (maximo is not None and valor > maximo):
                 if minimo is not None and maximo is not None:

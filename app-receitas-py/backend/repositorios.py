@@ -4,6 +4,8 @@ from backend.modelos import Avaliacao, Categoria, Ingrediente, ItemReceita, Rece
 
 
 class Repositorio(ABC):
+    # Nomes de tabela/coluna não podem ser parametrizados com "?". Por isso vêm
+    # destas constantes de classe, nunca do usuário. Os valores vão sempre por "?".
     tabela = ""
     colunas = ()
     ordem = "id"
@@ -22,6 +24,7 @@ class Repositorio(ABC):
         return [self._para_objeto(linha) for linha in self._banco.consultar(sql, parametros)]
 
     def criar(self, objeto):
+        objeto.validar()
         campos = ", ".join(self.colunas)
         marcadores = ", ".join("?" * len(self.colunas))
         cursor = self._banco.executar(
@@ -39,6 +42,7 @@ class Repositorio(ABC):
         return self._para_objeto(linha) if linha else None
 
     def atualizar(self, objeto):
+        objeto.validar()
         atribuicoes = ", ".join(f"{coluna} = ?" for coluna in self.colunas)
         self._banco.executar(
             f"UPDATE {self.tabela} SET {atribuicoes} WHERE id = ?",
