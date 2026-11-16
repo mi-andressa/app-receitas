@@ -4,7 +4,7 @@ import textwrap
 from backend.importador import ErroImportacao
 from backend.modelos import Avaliacao, Categoria, Ingrediente, ItemReceita, Receita
 
-LIMITE_SQLITE = 2**63 - 1
+LIMITE_SQLITE = 2**63 - 1  # maior INTEGER que o SQLite consegue armazenar
 
 
 class Menu:
@@ -54,7 +54,9 @@ class Menu:
             except Exception as erro:  # rede de segurança: nenhuma opção derruba o menu
                 print(f"⚠ Erro inesperado ({type(erro).__name__}). A operação foi cancelada.")
             if pausar:
-                resposta = input("\nEnter para ver o menu, ou digite a próxima opção: ").strip()
+                resposta = input(
+                    "\n[Enter] volta ao menu  |  ou digite o nº de outra opção do menu: "  # ← texto mais claro
+                ).strip()
                 if resposta.isdigit() and 0 <= int(resposta) <= len(opcoes):
                     atalho = int(resposta)
 
